@@ -1,6 +1,5 @@
 import { streamLines } from "../../../diff/util";
-import { DEFAULT_AUTOCOMPLETE_OPTS } from "../../../util/parameters";
-import { HelperVars } from "../../util/HelperVars";
+import { AutocompleteContext } from "../../util/AutocompleteContext";
 
 import { stopAtStartOf, stopAtStopTokens } from "./charStream";
 import {
@@ -23,7 +22,7 @@ export class StreamTransformPipeline {
     multiline: boolean,
     stopTokens: string[],
     fullStop: () => void,
-    helper: HelperVars,
+    helper: AutocompleteContext,
   ): AsyncGenerator<string> {
     let charGenerator = generator;
 
@@ -63,8 +62,7 @@ export class StreamTransformPipeline {
 
     lineGenerator = showWhateverWeHaveAtXMs(
       lineGenerator,
-      helper.options.showWhateverWeHaveAtXMs ??
-        (DEFAULT_AUTOCOMPLETE_OPTS.showWhateverWeHaveAtXMs as number),
+      helper.options.showWhateverWeHaveAtXMs,
     );
 
     const finalGenerator = streamWithNewLines(lineGenerator);
@@ -73,7 +71,7 @@ export class StreamTransformPipeline {
     }
   }
 
-  private getLineBelowCursor(helper: HelperVars): string {
+  private getLineBelowCursor(helper: AutocompleteContext): string {
     let lineBelowCursor = "";
     let i = 1;
     while (

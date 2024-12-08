@@ -46,7 +46,6 @@ export class ConfigHandler {
   ) {
     this.ide = ide;
     this.ideSettingsPromise = ideSettingsPromise;
-    this.writeLog = writeLog;
 
     // Set local profile as default
     const localProfileLoader = new LocalProfileLoader(

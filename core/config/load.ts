@@ -257,6 +257,12 @@ async function intermediateToFinalConfig(
   loadPromptFiles: boolean = true,
   allowFreeTrial: boolean = true,
 ): Promise<ContinueConfig> {
+  const writeLogWithSeparator = (log: string) =>
+    writeLog(
+      "==========================================================================\n==========================================================================\n" +
+        log,
+    );
+
   // Auto-detect models
   let models: BaseLLM[] = [];
   for (const desc of config.models) {
@@ -266,7 +272,7 @@ async function intermediateToFinalConfig(
         ide.readFile.bind(ide),
         uniqueId,
         ideSettings,
-        writeLog,
+        writeLogWithSeparator,
         config.completionOptions,
         config.systemMessage,
       );
@@ -288,7 +294,7 @@ async function intermediateToFinalConfig(
                 ide.readFile.bind(ide),
                 uniqueId,
                 ideSettings,
-                writeLog,
+                writeLogWithSeparator,
                 copyOf(config.completionOptions),
                 config.systemMessage,
               );
@@ -308,7 +314,7 @@ async function intermediateToFinalConfig(
     } else {
       const llm = new CustomLLMClass({
         ...desc,
-        options: { ...desc.options, writeLog } as any,
+        options: { ...desc.options, writeLog: writeLogWithSeparator } as any,
       });
       if (llm.model === "AUTODETECT") {
         try {
@@ -317,7 +323,11 @@ async function intermediateToFinalConfig(
             (modelName) =>
               new CustomLLMClass({
                 ...desc,
-                options: { ...desc.options, model: modelName, writeLog },
+                options: {
+                  ...desc.options,
+                  model: modelName,
+                  writeLog: writeLogWithSeparator,
+                },
               }),
           );
 
@@ -370,7 +380,7 @@ async function intermediateToFinalConfig(
               ide.readFile.bind(ide),
               uniqueId,
               ideSettings,
-              writeLog,
+              writeLogWithSeparator,
               config.completionOptions,
               config.systemMessage,
             );
@@ -836,7 +846,6 @@ async function loadFullConfigNode(
   );
   return { config: finalConfig, errors, configLoadInterrupted: false };
 }
-
 export {
   finalToBrowserConfig,
   intermediateToFinalConfig,

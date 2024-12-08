@@ -4,17 +4,16 @@ import { LRUCache } from "lru-cache";
 import Parser from "web-tree-sitter";
 
 import { IDE } from "../../..";
+import { languageForFilepath, LanguageId } from "../../../util/languageId";
 import {
-  getFullLanguageName,
   getQueryForFile,
   IGNORE_PATH_PATTERNS,
-  LanguageName,
 } from "../../../util/treeSitter";
 import {
   AutocompleteCodeSnippet,
   AutocompleteSnippetType,
 } from "../../snippets/types";
-import { AutocompleteSnippetDeprecated } from "../../types";
+import { TabAutocompleteOptions } from "../../TabAutocompleteOptions";
 import { AstPath } from "../../util/ast";
 import { ImportDefinitionsService } from "../ImportDefinitionsService";
 import { createOutline } from "../outline/createOutline";
@@ -34,9 +33,41 @@ function getSyntaxTreeString(
   return result;
 }
 
+/**
+ * A cache that stores promises. If a promise is requested and it's already in
+ * the cache, the promise is returned. If it's not in the cache, the promise is
+ * created, stored in the cache, and then returned.
+ *
+ * Set the max size to the number of cache entries you would like to store, based on memory consumption.
+ * Set the ttl value to the number of milliseconds you would like to keep the cache entry, based on how long you expect the data to be valid.
+ */
+export class LRUAsyncCache {
+  private cache: LRUCache<string, Promise<any>>;
+
+  constructor(options: LRUCache.Options<string, any, unknown>) {
+    this.cache = new LRUCache<string, Promise<any>>(options);
+  }
+
+  async get<T>(
+    key: string,
+    create: () => Promise<T>,
+    onCached: undefined | (() => void) = undefined,
+  ): Promise<T> {
+    let value = this.cache.get(key);
+    if (!value) {
+      value = create();
+      this.cache.set(key, value);
+    } else {
+      onCached?.();
+    }
+    return value;
+  }
+}
+
 export class RootPathContextService {
-  private cache = new LRUCache<string, AutocompleteSnippetDeprecated[]>({
+  private cache = new LRUAsyncCache({
     max: 100,
+    ttl: 1000 * 30,
   });
 
   constructor(
@@ -77,9 +108,9 @@ export class RootPathContextService {
   private async getSnippetsForNode(
     filepath: string,
     node: Parser.SyntaxNode,
-  ): Promise<AutocompleteSnippetDeprecated[]> {
-    const snippets: AutocompleteSnippetDeprecated[] = [];
-    const language = getFullLanguageName(filepath);
+  ): Promise<AutocompleteCodeSnippet[]> {
+    const snippets: AutocompleteCodeSnippet[] = [];
+    const language = languageForFilepath(filepath);
 
     let query: Parser.Query | undefined;
     switch (node.type) {
@@ -126,8 +157,8 @@ export class RootPathContextService {
   private async getSnippets(
     filepath: string,
     endPosition: Parser.Point,
-    language: LanguageName,
-  ): Promise<AutocompleteSnippetDeprecated[]> {
+    language: LanguageId,
+  ): Promise<AutocompleteCodeSnippet[]> {
     const definitions = await this.ide.gotoDefinition({
       filepath,
       position: {
@@ -135,7 +166,7 @@ export class RootPathContextService {
         character: endPosition.column,
       },
     });
-    const newSnippets = await Promise.all(
+    const newSnippets: AutocompleteCodeSnippet[] = await Promise.all(
       definitions
         .filter((definition) => {
           const isIgnoredPath = IGNORE_PATH_PATTERNS[language]?.some(
@@ -153,13 +184,15 @@ export class RootPathContextService {
           );
           if (outline !== undefined) {
             return {
-              ...def,
-              contents: outline,
+              type: AutocompleteSnippetType.Code,
+              filepath: def.filepath,
+              content: outline,
             };
           }
           return {
-            ...def,
-            contents: await this.ide.readRangeInFile(def.filepath, def.range),
+            type: AutocompleteSnippetType.Code,
+            filepath: def.filepath,
+            content: await this.ide.readRangeInFile(def.filepath, def.range),
           };
         }),
     );
@@ -170,35 +203,41 @@ export class RootPathContextService {
   async getContextForPath(
     filepath: string,
     astPath: AstPath,
-    // cursorIndex: number,
+    ctx: {
+      options: TabAutocompleteOptions;
+      writeLog: (message: string) => Promise<void>;
+    },
   ): Promise<AutocompleteCodeSnippet[]> {
     const snippets: AutocompleteCodeSnippet[] = [];
 
     let parentKey = filepath;
-    for (const astNode of astPath.filter((node) =>
+    const filteredAstPath = astPath.filter((node) =>
       RootPathContextService.TYPES_TO_USE.has(node.type),
-    )) {
+    );
+
+    if (ctx.options.logRootPathSnippets)
+      ctx.writeLog(
+        `RootPathSnippets: filtering ${astPath.map((t) => t.type)} by types ${RootPathContextService.TYPES_TO_USE.values()}. Resulting nodes: ${filteredAstPath.map((t) => t.type)}`,
+      );
+    for (const astNode of filteredAstPath) {
       const key = RootPathContextService.keyFromNode(parentKey, astNode);
-      // const type = astNode.type;
-      // debugger;
 
-      const foundInCache = this.cache.get(key);
-      const newSnippets =
-        foundInCache ?? (await this.getSnippetsForNode(filepath, astNode));
-
-      const formattedSnippets: AutocompleteCodeSnippet[] = newSnippets.map(
-        (item) => ({
-          filepath: item.filepath,
-          content: item.contents,
-          type: AutocompleteSnippetType.Code,
-        }),
+      const newSnippets = await this.cache.get(
+        key,
+        () => {
+          if (ctx.options.logRootPathSnippets)
+            ctx.writeLog(
+              `RootPathSnippets: getting snippets for ${astNode.type}`,
+            );
+          return this.getSnippetsForNode(filepath, astNode);
+        },
+        () => {
+          if (ctx.options.logRootPathSnippets)
+            ctx.writeLog(`RootPathSnippets: cache hit for ${astNode.type}`);
+        },
       );
 
-      snippets.push(...formattedSnippets);
-
-      if (!foundInCache) {
-        this.cache.set(key, newSnippets);
-      }
+      snippets.push(...newSnippets);
 
       parentKey = key;
     }
