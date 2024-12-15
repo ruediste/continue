@@ -686,6 +686,7 @@ declare global {
   
     // LSP
     gotoDefinition(location: Location): Promise<RangeInFile[]>;
+    gotoTypeDefinition(location: Location): Promise<RangeInFile[]>;
   
     // Callbacks
     onDidChangeActiveTextEditor(callback: (filepath: string) => void): void;

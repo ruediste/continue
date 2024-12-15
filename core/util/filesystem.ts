@@ -38,6 +38,9 @@ class FileSystemIde implements IDE {
   gotoDefinition(location: Location): Promise<RangeInFile[]> {
     return Promise.resolve([]);
   }
+  gotoTypeDefinition(location: Location): Promise<RangeInFile[]> {
+    return Promise.resolve([]);
+  }
   onDidChangeActiveTextEditor(callback: (filepath: string) => void): void {
     return;
   }

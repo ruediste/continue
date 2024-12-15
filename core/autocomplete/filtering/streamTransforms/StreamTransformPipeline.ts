@@ -45,7 +45,7 @@ export class StreamTransformPipeline {
           `CompletionStop: Completion stopped at suffix: \n---\n${suffix}\n---`,
         );
     });
-    for (const charFilter of ctx.lang.charFilters ?? []) {
+    for (const charFilter of ctx.languageInfo.charFilters ?? []) {
       charGenerator = charFilter({
         chars: charGenerator,
         prefix,
@@ -96,7 +96,7 @@ export class StreamTransformPipeline {
 
     lineGenerator = avoidEmptyComments(
       lineGenerator,
-      ctx.lang.singleLineComment,
+      ctx.languageInfo.singleLineComment,
       (line) => {
         if (ctx.options.logDroppedLinesFilter)
           ctx.writeLog(`EmptySingleLineCommentFilter: removed line ${line}`);
@@ -105,7 +105,7 @@ export class StreamTransformPipeline {
 
     lineGenerator = avoidPathLine(
       lineGenerator,
-      ctx.lang.singleLineComment,
+      ctx.languageInfo.singleLineComment,
       (droppedLine) => {
         if (ctx.options.logDroppedLinesFilter) {
           ctx.writeLog(`PathLineFilter:removed line ${droppedLine}`);
@@ -125,7 +125,7 @@ export class StreamTransformPipeline {
       }
     });
 
-    for (const lineFilter of ctx.lang.lineFilters ?? []) {
+    for (const lineFilter of ctx.languageInfo.lineFilters ?? []) {
       lineGenerator = lineFilter({
         lines: lineGenerator,
         fullStop,

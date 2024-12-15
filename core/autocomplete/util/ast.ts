@@ -45,6 +45,20 @@ export async function getTreePathAtCursor(
 
   return path;
 }
+export function getNodeBefore(
+  node: Parser.SyntaxNode,
+  cursorIndex: number,
+): Parser.SyntaxNode {
+  let candidate = node;
+  for (const child of node.children) {
+    if (child.endIndex < cursorIndex) candidate = child;
+    else if (child.startIndex <= cursorIndex && child.endIndex >= cursorIndex) {
+      return getNodeBefore(child, cursorIndex);
+    } else break;
+  }
+
+  return candidate;
+}
 
 function compare(a: Point, b: Position) {
   if (a.row < b.line) return -1;

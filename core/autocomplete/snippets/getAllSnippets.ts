@@ -31,6 +31,7 @@ function getSnippetsFromRecentlyEditedRanges(
   return helper.input.recentlyEditedRanges.map((range) => {
     return {
       filepath: range.filepath,
+      range: range.range,
       content: range.lines.join("\n"),
       type: AutocompleteSnippetType.Code,
     };
@@ -102,7 +103,7 @@ export const getAllSnippets = async (
 
   const empty = Promise.resolve([]);
 
-  const snippets: AutocompleteSnippet[][] = [
+  const snippets: AutocompleteSnippet[] = [
     recentlyEditedRangeSnippets,
     ...(await Promise.all([
       ctx.langOptions.enableRootPathSnippets
@@ -110,7 +111,7 @@ export const getAllSnippets = async (
             contextRetrievalService.getRootPathSnippets(ctx),
             "rootPath",
           )
-        : empty,
+        : [],
       ctx.langOptions.enableImportSnippets
         ? racePromise(
             contextRetrievalService.getSnippetsFromImportDefinitions(ctx),
@@ -123,11 +124,37 @@ export const getAllSnippets = async (
       ctx.langOptions.enableClipboardSnippets
         ? racePromise(getClipboardSnippets(ide, ctx), "clipboardSnippets")
         : empty,
+      ctx.langOptions.enableSurroundingSymbolsSnippets
+        ? racePromise(
+            contextRetrievalService.getSurroundingSymbolSnippets(ctx),
+            "surroundingSymbolsSnippets",
+          )
+        : empty,
     ])),
-  ];
+  ].flat(1);
 
-  return keepSnippetsFittingInMaxTokens(
-    ctx,
-    filterSnippetsAlreadyInCaretWindow(snippets.flat(), ctx.prunedCaretWindow),
+  // deduplicate  snippets
+  const codeSnippetMap = new Map<string, AutocompleteSnippet>();
+  const otherSnippetMap = new Map<string, AutocompleteSnippet>();
+  for (const snippet of snippets) {
+    if (snippet.type === AutocompleteSnippetType.Code) {
+      codeSnippetMap.set(
+        `${snippet.range.start.line}:${snippet.range.start.character}:${snippet.range.end.line}:${snippet.range.end.character}:${snippet.filepath}`,
+        snippet,
+      );
+    } else {
+      otherSnippetMap.set(snippet.type + ":" + snippet.content, snippet);
+    }
+  }
+
+  // deduplicate other snippets
+
+  const filteredSnippets = filterSnippetsAlreadyInCaretWindow(
+    [...codeSnippetMap.values(), ...otherSnippetMap.values()],
+    ctx.prunedCaretWindow,
   );
+
+  filteredSnippets.sort((a, b) => b.content.length - a.content.length);
+
+  return keepSnippetsFittingInMaxTokens(ctx, filteredSnippets);
 };

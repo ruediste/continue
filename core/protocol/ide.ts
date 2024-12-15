@@ -93,6 +93,7 @@ export type ToIdeFromWebviewOrCoreProtocol = {
   getLastModified: [{ files: string[] }, { [path: string]: number }];
 
   gotoDefinition: [{ location: Location }, RangeInFile[]];
+  gotoTypeDefinition: [{ location: Location }, RangeInFile[]];
 
   getGitHubAuthToken: [GetGhTokenArgs, string | undefined];
   getControlPlaneSessionInfo: [

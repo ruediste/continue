@@ -9,7 +9,7 @@ import {
 import { AutocompleteContext } from "../util/AutocompleteContext";
 
 const getCommentMark = (helper: AutocompleteContext) => {
-  return helper.lang.singleLineComment;
+  return helper.languageInfo.singleLineComment;
 };
 
 const addCommentMarks = (text: string, helper: AutocompleteContext) => {
@@ -30,6 +30,10 @@ const formatClipboardSnippet = (
   return formatCodeSnippet({
     filepath: "Untitled.txt",
     content: snippet.content,
+    range: {
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: 0 },
+    },
     type: AutocompleteSnippetType.Code,
   });
 };

@@ -203,7 +203,10 @@ const exe = os === "win32" ? ".exe" : "";
 
   await new Promise((resolve, reject) => {
     ncp(
-      path.join(__dirname, "../../../core/node_modules/tree-sitter-wasms/out"),
+      path.join(
+        __dirname,
+        "../../../core/node_modules/@ruediste/tree-sitter-wasms/out",
+      ),
       path.join(__dirname, "../out/tree-sitter-wasms"),
       { dereference: true },
       (error) => {

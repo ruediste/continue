@@ -22,7 +22,6 @@ export interface AutocompleteInput {
     text: string;
     range: Range;
   };
-  injectDetails?: string;
 }
 
 export interface AutocompleteOutcome extends TabAutocompleteOptions {

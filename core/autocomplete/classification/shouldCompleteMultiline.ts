@@ -35,18 +35,18 @@ export function shouldCompleteMultiline(helper: AutocompleteContext) {
 
   // Don't complete multi-line for single-line comments
   if (
-    helper.lang.singleLineComment &&
+    helper.languageInfo.singleLineComment &&
     helper.fullPrefix
       .split("\n")
       .slice(-1)[0]
       ?.trimStart()
-      .startsWith(helper.lang.singleLineComment)
+      .startsWith(helper.languageInfo.singleLineComment)
   ) {
     return false;
   }
 
   return shouldCompleteMultilineBasedOnLanguage(
-    helper.lang,
+    helper.languageInfo,
     helper.prunedPrefix,
     helper.prunedSuffix,
   );

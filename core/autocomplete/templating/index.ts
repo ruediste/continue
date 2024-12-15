@@ -92,7 +92,7 @@ export function renderPrompt({
           template,
           prefix,
           suffix,
-          helper.lang,
+          helper.languageInfo,
           helper.filepath,
           reponame,
         )
@@ -101,13 +101,13 @@ export function renderPrompt({
           suffix,
           helper.filepath,
           reponame,
-          helper.lang.name,
+          helper.languageInfo.name,
           snippets,
         );
 
   const stopTokens = getStopTokens(
     completionOptions,
-    helper.lang,
+    helper.languageInfo,
     helper.modelName,
   );
 

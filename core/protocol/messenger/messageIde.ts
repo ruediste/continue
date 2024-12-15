@@ -1,5 +1,5 @@
-import { GetGhTokenArgs, ToIdeFromWebviewOrCoreProtocol } from "../ide";
 import { FromIdeProtocol } from "..";
+import { GetGhTokenArgs, ToIdeFromWebviewOrCoreProtocol } from "../ide";
 
 import type {
   ContinueRcJson,
@@ -35,6 +35,9 @@ export class MessageIde implements IDE {
   }
   async gotoDefinition(location: Location): Promise<RangeInFile[]> {
     return this.request("gotoDefinition", { location });
+  }
+  async gotoTypeDefinition(location: Location): Promise<RangeInFile[]> {
+    return this.request("gotoTypeDefinition", { location });
   }
   onDidChangeActiveTextEditor(callback: (filepath: string) => void): void {
     this.on("didChangeActiveTextEditor", (data) => callback(data.filepath));

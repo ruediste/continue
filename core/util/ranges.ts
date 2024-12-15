@@ -3,7 +3,11 @@ import { Position, Range } from "../index.js";
 export function getRangeInString(content: string, range: Range): string {
   const lines = content.split("\n");
 
+  if (range.start.line > range.end.line) {
+    return "";
+  }
   if (range.start.line === range.end.line) {
+    if (range.start.character > range.end.character) return "";
     return (
       lines[range.start.line]?.substring(
         range.start.character,
@@ -22,6 +26,30 @@ export function getRangeInString(content: string, range: Range): string {
     lines[range.end.line]?.substring(0, range.end.character) ?? "";
 
   return [firstLine, ...middleLines, lastLine].join("\n");
+}
+
+export function positionToIndex(content: string, position: Position): number {
+  let currentPosition: Position = { line: 0, character: 0 };
+  let index = 0;
+  while (index < content.length) {
+    if (currentPosition.line > position.line) {
+      break;
+    }
+    if (
+      currentPosition.line === position.line &&
+      currentPosition.character >= position.character
+    ) {
+      break;
+    }
+    if (content[index] === "\n") {
+      currentPosition.line++;
+      currentPosition.character = 0;
+    } else {
+      currentPosition.character++;
+    }
+    index++;
+  }
+  return index;
 }
 
 export function intersection(a: Range, b: Range): Range | null {

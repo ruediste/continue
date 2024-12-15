@@ -2,18 +2,15 @@ import { createHash } from "crypto";
 
 import Parser from "web-tree-sitter";
 
-import { IDE } from "../../..";
+import { IDE, RangeInFile } from "../../..";
 import { rangeInFileToString } from "../../../util";
-import { languageForFilepath, LanguageId } from "../../../util/languageId";
+import { languageForFilepath } from "../../../util/languageId";
 import {
   getQuery,
   IGNORE_PATH_PATTERNS,
   rangeToString,
 } from "../../../util/treeSitter";
-import {
-  AutocompleteCodeSnippet,
-  AutocompleteSnippetType,
-} from "../../snippets/types";
+import { AutocompleteCodeSnippet } from "../../snippets/types";
 import { AstPath } from "../../util/ast";
 import {
   AutocompleteLoggingContext,
@@ -68,96 +65,83 @@ export class RootPathContextService {
 
     if (!query) {
       writeLog?.(`No query for node type ${node.type} in language ${language}`);
-
       return [];
     }
 
     const snippets: AutocompleteCodeSnippet[] = [];
-    const queries = query.matches(node).map(async (match) => {
-      writeLog?.(
-        `Match found: node type: ${node.type} language: ${language} patternIndex: ${match.pattern}, nodePosition: ${rangeToString(node)}`,
-      );
-      for (const item of match.captures) {
+    const queries = query
+      .matches(node, { maxStartDepth: 0 })
+      .map(async (match) => {
         writeLog?.(
-          `Capture found: node type: ${item.node.type} nodePosition: ${rangeToString(item.node)} text: ${item.node.text}`,
+          `Match found: node type: ${node.type} language: ${language} patternIndex: ${match.pattern}, nodePosition: ${rangeToString(node)}`,
         );
-
-        try {
-          const endPosition = item.node.endPosition;
-          const newSnippets = await this.getSnippets(
-            filepath,
-            endPosition,
-            language,
-            ctx,
-            writeLog,
+        for (const item of match.captures) {
+          writeLog?.(
+            `Capture found: node type: ${item.node.type} nodePosition: ${rangeToString(item.node)} text: ${item.node.text}`,
           );
-          snippets.push(...newSnippets);
-        } catch (e) {
-          throw e;
+
+          try {
+            const endPosition = item.node.endPosition;
+            const definitions = await this.ide.gotoDefinition({
+              filepath,
+              position: {
+                line: endPosition.row,
+                character: endPosition.column,
+              },
+            });
+            writeLog?.(
+              "Found definitions: " +
+                definitions.map((d) => rangeInFileToString(d)).join(", "),
+            );
+            snippets.push(
+              ...(await this.getSnippetsForRanges(definitions, writeLog, ctx)),
+            );
+          } catch (e) {
+            throw e;
+          }
         }
-      }
-    });
+      });
 
     await Promise.all(queries);
 
     return snippets;
   }
 
-  private async getSnippets(
-    filepath: string,
-    endPosition: Parser.Point,
-    language: LanguageId,
+  private snippetForRangeCache = new LRUAsyncCache({
+    max: 50,
+    ttl: 1000 * 10,
+  });
+
+  public async getSnippetsForRanges(
+    definitions: RangeInFile[],
+    writeLog: LogWriter | undefined,
     ctx: AutocompleteLoggingContext,
-    writeLog?: LogWriter,
-  ): Promise<AutocompleteCodeSnippet[]> {
-    const definitions = await this.ide.gotoDefinition({
-      filepath,
-      position: {
-        line: endPosition.row,
-        character: endPosition.column,
-      },
-    });
-    writeLog?.(
-      "Found definitions: " +
-        definitions.map((d) => rangeInFileToString(d)).join(", "),
-    );
-    const newSnippets: AutocompleteCodeSnippet[] = await Promise.all(
-      definitions
-        .filter((definition) => {
-          const isIgnoredPath = IGNORE_PATH_PATTERNS[language]?.some(
-            (pattern) => pattern.test(definition.filepath),
-          );
-          if (isIgnoredPath)
-            writeLog?.(`Ignoring path: ${definition.filepath}`);
-          return !isIgnoredPath;
-        })
-        .map(async (def) => {
-          const fileContents = await this.ide.readFile(def.filepath);
-          const outline = await createOutline(
-            def.filepath,
-            fileContents,
-            def.range,
-            ctx,
-          );
-          if (outline !== undefined) {
-            writeLog?.("Created Outline for " + rangeInFileToString(def));
-            return {
-              type: AutocompleteSnippetType.Code,
-              filepath: def.filepath,
-              content: outline,
-            };
-          }
+  ) {
+    const newSnippets: AutocompleteCodeSnippet[][] = await Promise.all(
+      definitions.map((def) =>
+        this.snippetForRangeCache.get<AutocompleteCodeSnippet[]>(
+          `${def.filepath}:${def.range.start.line}`,
+          async () => {
+            const language = languageForFilepath(def.filepath);
+            if (!language) return [];
+            const isIgnoredPath = IGNORE_PATH_PATTERNS[language]?.some(
+              (pattern) => pattern.test(def.filepath),
+            );
+            if (isIgnoredPath) {
+              writeLog?.(`Ignoring path: ${def.filepath}`);
+              return [];
+            }
 
-          writeLog?.("Created Snippet for " + rangeInFileToString(def));
-          return {
-            type: AutocompleteSnippetType.Code,
-            filepath: def.filepath,
-            content: await this.ide.readRangeInFile(def.filepath, def.range),
-          };
-        }),
+            const fileContents = await this.ide.readFile(def.filepath);
+            return [
+              await createOutline(def.filepath, fileContents, def.range, ctx),
+            ];
+          },
+        ),
+      ),
     );
 
-    return newSnippets;
+    return newSnippets.flat();
   }
 
   async getContextForPath(
@@ -171,7 +155,7 @@ export class RootPathContextService {
       : undefined;
 
     let parentKey = filepath;
-    const filteredAstPath = astPath.filter((node) => node.isNamed());
+    const filteredAstPath = astPath.filter((node) => node.isNamed);
 
     writeLog?.(`processing path ${filteredAstPath.map((t) => t.type)}`);
     for (const astNode of filteredAstPath) {

@@ -3008,6 +3008,10 @@
               "type": "boolean",
               "description": "If set to true, Continue will log the snippets it finds in the clipboard"
             },
+            "logSurroundingSymbolsSnippets": {
+              "type": "boolean",
+              "description": "If set to true, Continue will log the snippets it finds by looking at the surrounding symbols of the completion location"
+            },
             "defaultLanguageOptions": {
               "description": "Default language options for all languages",
               "$ref": "#/$defs/TabAutocompleteLanguageOptions"
@@ -3289,6 +3293,10 @@
         "enableClipboardSnippets": {
           "type": "boolean",
           "description": "Enable clipboard snippets. If enabled, the clipboard will be used as context for the LLM"
+        },
+        "enableSurroundingSymbolsSnippets": {
+          "type": "boolean",
+          "description": "Enable surrounding symbols snippets. If enabled, the surrounding symbols will be used as context for the LLM"
         },
         "outlineNodeReplacements": {
           "type": "object",

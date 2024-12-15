@@ -1,3 +1,5 @@
+import { Range } from "../..";
+
 export enum AutocompleteSnippetType {
   Code = "code",
   Diff = "diff",
@@ -11,6 +13,7 @@ interface BaseAutocompleteSnippet {
 
 export interface AutocompleteCodeSnippet extends BaseAutocompleteSnippet {
   filepath: string;
+  range: Range;
   type: AutocompleteSnippetType.Code;
 }
 

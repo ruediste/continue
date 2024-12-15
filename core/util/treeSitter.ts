@@ -151,7 +151,7 @@ async function loadLanguage(id: LanguageId): Promise<Language> {
   const wasmPath = path.join(
     __dirname,
     ...(process.env.NODE_ENV === "test"
-      ? ["node_modules", "tree-sitter-wasms", "out"]
+      ? ["node_modules", "@ruediste", "tree-sitter-wasms", "out"]
       : ["tree-sitter-wasms"]),
     `tree-sitter-${supportedLanguages[id]}.wasm`,
   );

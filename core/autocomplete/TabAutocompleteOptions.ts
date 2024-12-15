@@ -5,7 +5,9 @@ export interface TabAutocompleteLanguageOptions {
   enableImportSnippets: boolean;
   enableDiffSnippets: boolean;
   enableClipboardSnippets: boolean;
+  enableSurroundingSymbolsSnippets: boolean;
   outlineNodeReplacements: { [key: string]: string };
+  outlineTypeRootNodes: string[];
   filterMaxRepeatingLines: number;
 }
 
@@ -44,6 +46,7 @@ export interface TabAutocompleteOptions {
   logImportSnippets: boolean;
   logDiffSnippets: boolean;
   logClipboardSnippets: boolean;
+  logSurroundingSymbolsSnippets: boolean;
 
   defaultLanguageOptions: TabAutocompleteLanguageOptions;
   languageOptions: {
@@ -81,8 +84,9 @@ export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
   logImportSnippets: false,
   logDiffSnippets: false,
   logClipboardSnippets: false,
-  logCompletionStop: false,
+  logSurroundingSymbolsSnippets: false,
 
+  logCompletionStop: false,
   logDroppedLinesFilter: false,
   logPostprocessing: false,
   logCompletionOutcome: false,
@@ -92,9 +96,11 @@ export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
     enableImportSnippets: true,
     enableDiffSnippets: true,
     enableClipboardSnippets: true,
+    enableSurroundingSymbolsSnippets: true,
     outlineNodeReplacements: {
       statement_block: "{...}",
     },
+    outlineTypeRootNodes: [],
     filterMaxRepeatingLines: 3,
   },
   languageOptions: {},
