@@ -99,8 +99,9 @@ export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
     enableSurroundingSymbolsSnippets: true,
     outlineNodeReplacements: {
       statement_block: "{...}",
+      block: "{...}",
     },
-    outlineTypeRootNodes: [],
+    outlineTypeRootNodes: ["class_declaration",],
     filterMaxRepeatingLines: 3,
   },
   languageOptions: {},

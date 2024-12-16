@@ -1,23 +1,7 @@
-import Parser from "web-tree-sitter";
-import { IDE, Position, Range } from "../..";
-import {
-  getLanguageForFile,
-  rangeToString,
-  treeToString,
-} from "../../util/treeSitter";
-import {
-  AutocompleteCodeSnippet,
-  AutocompleteSnippetType,
-} from "../snippets/types";
-import {
-  AutocompleteContext,
-  AutocompleteLoggingContext,
-  LogWriter,
-} from "../util/AutocompleteContext";
+import { IDE, Position } from "../..";
+import { AutocompleteCodeSnippet } from "../snippets/types";
+import { AutocompleteContext, LogWriter } from "../util/AutocompleteContext";
 
-import { LRUCache } from "lru-cache";
-import { getRangeInString } from "../../util/ranges";
-import { getAst, getNodeAroundRange } from "../util/ast";
 import { ImportDefinitionsService } from "./ImportDefinitionsService";
 import { getSymbolsForSnippet } from "./ranking";
 import { LRUAsyncCache } from "./root-path-context/LRUAsyncCache";
@@ -60,7 +44,7 @@ export class ContextRetrievalService {
                 `found definition ${rif.filepath} ${rif.range.start.line}:${rif.range.start.character} - ${rif.range.end.line}:${rif.range.end.character}`,
               );
 
-              return await this.createOutline(
+              return await this.rootPathContextService.createOutline(
                 rif.filepath,
                 rif.contents,
                 rif.range,
@@ -214,108 +198,5 @@ export class ContextRetrievalService {
     }
 
     return (await Promise.all(snippets)).flat();
-  }
-
-  private collectOutline(
-    node: Parser.SyntaxNode,
-    drop: (startIndex: number, endIndex: number, replacement: string) => void,
-    ctx: AutocompleteLoggingContext,
-    writeLog: LogWriter | undefined,
-  ) {
-    const replacement = ctx.langOptions.outlineNodeReplacements[node.type];
-
-    if (replacement !== undefined) {
-      writeLog?.(
-        `replacing ${node.type} ${rangeToString(node)} by: ${replacement}`,
-      );
-      drop(node.startIndex, node.endIndex, replacement);
-      return;
-    }
-    let children = node.children;
-    for (let i = 0; i < children.length; i++) {
-      this.collectOutline(children[i], drop, ctx, writeLog);
-    }
-  }
-
-  private astCache = new LRUAsyncCache({
-    max: 50,
-    ttl: 1000 * 5,
-  });
-  private typeOutlineCache = new LRUCache<string, string>({
-    max: 50,
-    ttl: 1000 * 5,
-  });
-
-  async createOutline(
-    filepath: string,
-    fileContents: string,
-    range: Range,
-    ctx: AutocompleteLoggingContext,
-  ): Promise<AutocompleteCodeSnippet> {
-    const ast = await this.astCache.get(filepath, () =>
-      getAst(filepath, fileContents),
-    );
-    const language = await getLanguageForFile(filepath);
-    const writeLog: LogWriter | undefined = ctx.options.logOutlineCreation
-      ? (msg) => ctx.writeLog(`createOutline: ${msg}`)
-      : undefined;
-
-    if (ast !== undefined && language !== undefined) {
-      let node = getNodeAroundRange(ast, range);
-      writeLog?.(`${filepath} ${rangeToString(node)}\n${treeToString(node)}`);
-      let content = "";
-      if (ctx.langOptions.outlineTypeRootNodes.includes(node.type)) {
-        const key = `${filepath}:${node.startIndex}:${node.endIndex}`;
-        if (this.typeOutlineCache.has(key))
-          content = this.typeOutlineCache.get(key)!;
-        else {
-          writeLog?.(`creating type outline for ${node.type}`);
-          let index = node.startIndex;
-          this.collectOutline(
-            node,
-            (startIndex, endIndex, replacement) => {
-              if (startIndex > index) {
-                content += fileContents.substring(index, startIndex);
-              }
-              content += replacement;
-              index = endIndex;
-            },
-            ctx,
-            writeLog,
-          );
-          content += fileContents.substring(index, node.endIndex);
-          this.typeOutlineCache.set(key, content);
-        }
-      } else {
-        writeLog?.(`using text of node ${node.type}`);
-        content = node.text;
-      }
-
-      return {
-        type: AutocompleteSnippetType.Code,
-        filepath,
-        range: {
-          start: {
-            line: node.startPosition.row,
-            character: node.startPosition.column,
-          },
-          end: {
-            line: node.endPosition.row,
-            character: node.endPosition.column,
-          },
-        },
-        content: content,
-      };
-    } else {
-      ctx.writeLog(
-        `unable to parse ${filepath} ${range.start.line + 1}:${range.start.character + 1} - ${range.end.line + 1}:${range.end.character + 1}`,
-      );
-      return {
-        type: AutocompleteSnippetType.Code,
-        filepath,
-        range,
-        content: getRangeInString(fileContents, range),
-      };
-    }
   }
 }

@@ -2,22 +2,28 @@ import { createHash } from "crypto";
 
 import Parser from "web-tree-sitter";
 
-import { IDE, RangeInFile } from "../../..";
+import { LRUCache } from "lru-cache";
+import { IDE, Range, RangeInFile } from "../../..";
 import { rangeInFileToString } from "../../../util";
 import { languageForFilepath } from "../../../util/languageId";
+import { getRangeInString } from "../../../util/ranges";
 import {
+  getLanguageForFile,
   getQuery,
   IGNORE_PATH_PATTERNS,
   rangeToString,
+  treeToString,
 } from "../../../util/treeSitter";
-import { AutocompleteCodeSnippet } from "../../snippets/types";
-import { AstPath } from "../../util/ast";
+import {
+  AutocompleteCodeSnippet,
+  AutocompleteSnippetType,
+} from "../../snippets/types";
+import { AstPath, getAst, getNodeAroundRange } from "../../util/ast";
 import {
   AutocompleteLoggingContext,
   LogWriter,
 } from "../../util/AutocompleteContext";
 import { ImportDefinitionsService } from "../ImportDefinitionsService";
-import { createOutline } from "../outline/createOutline";
 import { LRUAsyncCache } from "./LRUAsyncCache";
 
 export class RootPathContextService {
@@ -134,7 +140,12 @@ export class RootPathContextService {
 
             const fileContents = await this.ide.readFile(def.filepath);
             return [
-              await createOutline(def.filepath, fileContents, def.range, ctx),
+              await this.createOutline(
+                def.filepath,
+                fileContents,
+                def.range,
+                ctx,
+              ),
             ];
           },
         ),
@@ -178,5 +189,108 @@ export class RootPathContextService {
     }
 
     return snippets;
+  }
+
+  private collectOutline(
+    node: Parser.SyntaxNode,
+    drop: (startIndex: number, endIndex: number, replacement: string) => void,
+    ctx: AutocompleteLoggingContext,
+    writeLog: LogWriter | undefined,
+  ) {
+    const replacement = ctx.langOptions.outlineNodeReplacements[node.type];
+
+    if (replacement !== undefined) {
+      writeLog?.(
+        `replacing ${node.type} ${rangeToString(node)} by: ${replacement}`,
+      );
+      drop(node.startIndex, node.endIndex, replacement);
+      return;
+    }
+    let children = node.children;
+    for (let i = 0; i < children.length; i++) {
+      this.collectOutline(children[i], drop, ctx, writeLog);
+    }
+  }
+
+  private astCache = new LRUAsyncCache({
+    max: 50,
+    ttl: 1000 * 5,
+  });
+  private typeOutlineCache = new LRUCache<string, string>({
+    max: 50,
+    ttl: 1000 * 5,
+  });
+
+  async createOutline(
+    filepath: string,
+    fileContents: string,
+    range: Range,
+    ctx: AutocompleteLoggingContext,
+  ): Promise<AutocompleteCodeSnippet> {
+    const ast = await this.astCache.get(filepath, () =>
+      getAst(filepath, fileContents),
+    );
+    const language = await getLanguageForFile(filepath);
+    const writeLog: LogWriter | undefined = ctx.options.logOutlineCreation
+      ? (msg) => ctx.writeLog(`createOutline: ${msg}`)
+      : undefined;
+
+    if (ast !== undefined && language !== undefined) {
+      let node = getNodeAroundRange(ast, range);
+      writeLog?.(`${filepath} ${rangeToString(node)}\n${treeToString(node)}`);
+      let content = "";
+      if (ctx.langOptions.outlineTypeRootNodes.includes(node.type)) {
+        const key = `${filepath}:${node.startIndex}:${node.endIndex}`;
+        if (this.typeOutlineCache.has(key))
+          content = this.typeOutlineCache.get(key)!;
+        else {
+          writeLog?.(`creating type outline for ${node.type}`);
+          let index = node.startIndex;
+          this.collectOutline(
+            node,
+            (startIndex, endIndex, replacement) => {
+              if (startIndex > index) {
+                content += fileContents.substring(index, startIndex);
+              }
+              content += replacement;
+              index = endIndex;
+            },
+            ctx,
+            writeLog,
+          );
+          content += fileContents.substring(index, node.endIndex);
+          this.typeOutlineCache.set(key, content);
+        }
+      } else {
+        writeLog?.(`using text of node ${node.type}`);
+        content = node.text;
+      }
+
+      return {
+        type: AutocompleteSnippetType.Code,
+        filepath,
+        range: {
+          start: {
+            line: node.startPosition.row,
+            character: node.startPosition.column,
+          },
+          end: {
+            line: node.endPosition.row,
+            character: node.endPosition.column,
+          },
+        },
+        content: content,
+      };
+    } else {
+      ctx.writeLog(
+        `unable to parse ${filepath} ${range.start.line + 1}:${range.start.character + 1} - ${range.end.line + 1}:${range.end.character + 1}`,
+      );
+      return {
+        type: AutocompleteSnippetType.Code,
+        filepath,
+        range,
+        content: getRangeInString(fileContents, range),
+      };
+    }
   }
 }
